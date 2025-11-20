@@ -1,0 +1,70 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Product;
+use App\Models\PartnerJoinRequest;
+use Illuminate\Http\Request;
+
+class PartnerJoinRequestController extends Controller
+{
+    public function sendJoinRequest(Product $product)
+    {
+        // 1) Тек активный продуктке ғана запрос жіберуге болады
+        if ($product->status !== 'active') {
+            return response()->json(['message' => 'Product is not active'], 400);
+        }
+
+        // 2) Өзінің тауарға запрос жібермеу
+        if ($product->partner_id == auth()->id()) {
+            return response()->json(['message' => 'Cannot join your own product'], 400);
+        }
+
+        // 3) Алдыңғы pending запрос барма тексеру
+        $exists = PartnerJoinRequest::where('product_id', $product->id)
+            ->where('partner_id', auth()->id())
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['message' => 'Request already sent'], 400);
+        }
+
+        // 4) Жаңа запрос құру
+        PartnerJoinRequest::create([
+            'product_id' => $product->id,
+            'partner_id' => auth()->id(),
+        ]);
+
+        return response()->json(['message' => 'Join request sent successfully']);
+    }
+
+
+    // ADMIN approves request
+    public function approve(PartnerJoinRequest $request)
+    {
+        $request->update(['status' => 'approved']);
+
+        // партнерды осы продуктке қосу
+        $request->product->partners()->attach($request->partner_id);
+
+        return response()->json(['message' => 'Request approved']);
+    }
+
+    // ADMIN rejects
+    public function reject(PartnerJoinRequest $request)
+    {
+        $request->update(['status' => 'rejected']);
+
+        return response()->json(['message' => 'Request rejected']);
+    }
+
+    // ADMIN list all
+    public function index()
+    {
+        return PartnerJoinRequest::with(['partner', 'product'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+}
+
