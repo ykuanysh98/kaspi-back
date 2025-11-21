@@ -33,6 +33,10 @@ class ProductController extends Controller
             }
         }
 
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
         if ($request->filled('min_price')) {
             $query->where('price', '>=', $request->min_price);
         }
@@ -102,16 +106,15 @@ class ProductController extends Controller
     {
         $partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
             ->where('partner_product.product_id', $product->id)
-            ->select('partners.*')
+            ->select('partners.*', 'partner_product.price') // price қосылды
             ->get();
 
-        $images = ProductImage::join('products', 'products.id', '=', 'product_images.product_id')
-            ->where('product_images.product_id', $product->id)
-            ->select('product_images.id', 'product_images.path')
+        $images = ProductImage::where('product_id', $product->id)
+            ->select('id', 'path')
             ->get();
 
         $product->partners = $partners;
-        $product->imeges = $images;
+        $product->images = $images; // imeges → images деп түзеттім
 
         return response()->json(['data' => $product]);
     }
@@ -148,6 +151,7 @@ class ProductController extends Controller
         PartnerProduct::create([
             'product_id' => $product->id,
             'partner_id' => auth()->id(),
+            'price' => $request->price,
         ]);
 
         return response()->json($product->load('images'), 201);
@@ -160,14 +164,34 @@ class ProductController extends Controller
             'price'       => 'sometimes|numeric',
             'quantity'    => 'sometimes|integer|min:0',
             'description' => 'nullable|string',
-            'status' => 'in:active,inactive,out_of_stock'
+            'status'      => 'in:active,inactive,out_of_stock',
+            'partner_id'  => 'sometimes|exists:partners,id', // партнерді беру керек
         ]);
 
-        $product->update($validated);
+        $productFields = collect($validated)->only(['name', 'quantity', 'description', 'status'])->toArray();
+        if (!empty($productFields)) {
+            $product->update($productFields);
+        }
+
+        if (isset($validated['price']) && isset($validated['partner_id'])) {
+            $partnerProduct = PartnerProduct::where('product_id', $product->id)
+                ->where('partner_id', $validated['partner_id'])
+                ->first();
+
+            if ($partnerProduct) {
+                $partnerProduct->update(['price' => $validated['price']]);
+            } else {
+                PartnerProduct::create([
+                    'product_id' => $product->id,
+                    'partner_id' => $validated['partner_id'],
+                    'price'      => $validated['price'],
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'Product updated successfully ✅',
-            'product' => $product->fresh('images'),
+            'product' => $product->fresh('images', 'partners'),
         ]);
     }
 
@@ -243,6 +267,7 @@ class ProductController extends Controller
             PartnerProduct::firstOrCreate([
                 'product_id' => $product->id,
                 'partner_id' => $partnerId,
+                'price' => $request->price,
             ]);
         }
 
@@ -297,7 +322,6 @@ class ProductController extends Controller
         $product->save();
 
         ProductActivationRequest::where('product_id', $product->id)
-            ->where('status', 'pending')
             ->update(['status' => 'approved']);
 
         return response()->json([
@@ -308,7 +332,6 @@ class ProductController extends Controller
     public function reject(Product $product)
     {
         ProductActivationRequest::where('product_id', $product->id)
-            ->where('status', 'pending')
             ->update(['status' => 'rejected']);
 
         return response()->json([

@@ -115,7 +115,10 @@ class PartnerController extends Controller
 
     public function show($id)
     {
-        $partner = Partner::find($id);
+        $partner = Partner::with([
+            'products.images',      // өнімдердің суреттері
+            'products.partners'     // әр өнімге байланысты партнерлер
+        ])->find($id);
 
         if (!$partner) {
             return response()->json(['message' => 'Partner not found'], 404);

@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders-partner', [OrderController::class, 'list']);
 
     Route::get('/favorites', [FavoriteController::class, 'index']);
     Route::post('/favorites/toggle', [FavoriteController::class, 'toggle']);
@@ -86,6 +87,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/products/{product}/reject', [ProductController::class, 'reject']);  // отказ
 
         Route::post('/products/{product}/join-request', [PartnerJoinRequestController::class, 'sendJoinRequest']); // дайын продуктқа қосылу
+        Route::post('/products/{product}/remove', [PartnerJoinRequestController::class, 'remove']); // дайын продуктқа қосылу
         Route::get('/partner-join-requests', [PartnerJoinRequestController::class, 'index']); // қосылмақшы болғандар тізімі
         Route::post('/partner-join-requests/{request}/approve', [PartnerJoinRequestController::class, 'approve']); // қабылдау
         Route::post('/partner-join-requests/{request}/reject', [PartnerJoinRequestController::class, 'reject']); // отказ
@@ -94,12 +96,10 @@ Route::prefix('admin')->group(function () {
         });
     });
 
-
     Route::get('/partners', [PartnerController::class, 'index']);
     Route::post('/partners', [PartnerController::class, 'store']);
     Route::post('/partners/{id}', [PartnerController::class, 'update']);
     Route::delete('/partners/{id}', [PartnerController::class, 'destroy']);
-
 
     Route::post('/products/{id}/partners', [ProductController::class, 'attachPartner']);
 });

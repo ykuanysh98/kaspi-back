@@ -73,25 +73,39 @@ class OrderController extends Controller
 
     public function index()
     {
-        $user = Auth::user();
+        //        $user = Auth::user();
 
-        $orders = Order::where('user_id', $user->id)->get();
+        //        $orders = Order::where('user_id', $user->id)->get();
 
-        foreach ($orders as $order) {
-            $orderItems = OrderItem::where('order_id', $order->id)->get();
+        //        foreach ($orders as $order) {
+        //            $orderItems = OrderItem::where('order_id', $order->id)->get();
+        //
+        //            foreach ($orderItems as $orderItem) {
+        //                $product = Product::find($orderItem['product_id']);
+        //                $orderItem->product = $product;
+        //            }
+        //
+        //            $order->items = $orderItems;
+        //        }
 
-            foreach ($orderItems as $orderItem) {
-                $product = Product::find($orderItem['product_id']);
-                $orderItem->product = $product;
-            }
-
-            $order->items = $orderItems;
-        }
-
-        //   $orders = Order::with(['items.product'])
-        //       ->where('user_id', Auth::id())
-        //       ->get();
+       $orders = Order::with(['items.product'])
+           ->where('user_id', Auth::id())
+           ->get();
 
         return response()->json($orders, 201);
     }
+
+    public function list()
+    {
+        $partner = Auth::user();
+
+        $orders = \DB::table('orders')
+            ->join('order_items', 'orders.id', '=', 'order_items.order_id')
+            ->where('order_items.partner_id', $partner->id)
+            ->select('orders.*')
+            ->get();
+
+        return response()->json($orders, 201);
+    }
+
 }

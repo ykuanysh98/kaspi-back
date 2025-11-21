@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProductImage;
 use Illuminate\Http\Request;
 use App\Models\Favorites;
 use App\Models\Product;
@@ -16,6 +17,13 @@ class FavoriteController extends Controller
             ->where('favorites.user_id', Auth::id())
             ->select('products.*', DB::raw('true as is_favorite'))
             ->get();
+
+        foreach ($products as $product) {
+            // Images
+            $product->images = ProductImage::where('product_id', $product->id)
+                ->select('id', 'path')
+                ->get();
+        }
 
         return response()->json($products);
     }

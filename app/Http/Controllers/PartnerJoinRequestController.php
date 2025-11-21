@@ -34,6 +34,7 @@ class PartnerJoinRequestController extends Controller
         PartnerJoinRequest::create([
             'product_id' => $product->id,
             'partner_id' => auth()->id(),
+            'status' => 'pending',
         ]);
 
         return response()->json(['message' => 'Join request sent successfully']);
@@ -57,6 +58,15 @@ class PartnerJoinRequestController extends Controller
         $request->update(['status' => 'rejected']);
 
         return response()->json(['message' => 'Request rejected']);
+    }
+
+    public function remove(Request $request, $id)
+    {
+        $product = Product::findOrFail($id);
+
+        $product->partners()->detach($request->partner_id);
+
+        return response()->json(['message' => 'Removed']);
     }
 
     // ADMIN list all
