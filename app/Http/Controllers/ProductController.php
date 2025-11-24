@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ProductActivationRequest;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -72,7 +73,20 @@ class ProductController extends Controller
         foreach ($products as $product) {
 
             $partnersIds = PartnerProduct::where('product_id', $product->id)->pluck('partner_id')->toArray();
-            $product->partners = Partner::whereIn('id', $partnersIds)->get();
+
+            $product->partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
+                ->where('partner_product.product_id', $product->id)
+                ->select(
+                    'partners.id',
+                    'partners.company_name',
+                    'partners.email',
+                    'partners.phone',
+
+                    // нақты partner_product бағасын аламыз
+                    // егер null болса → product.price қайтарылады
+                    DB::raw("COALESCE(partner_product.price, {$product->price}) AS price")
+                )
+                ->get();
 
             // Images
             $product->images = ProductImage::where('product_id', $product->id)
@@ -267,7 +281,6 @@ class ProductController extends Controller
             PartnerProduct::firstOrCreate([
                 'product_id' => $product->id,
                 'partner_id' => $partnerId,
-                'price' => $request->price,
             ]);
         }
 
