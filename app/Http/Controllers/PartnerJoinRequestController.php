@@ -39,9 +39,6 @@ class PartnerJoinRequestController extends Controller
 
         return response()->json(['message' => 'Join request sent successfully']);
     }
-
-
-    // ADMIN approves request
     public function approve(PartnerJoinRequest $request)
     {
         $request->update(['status' => 'approved']);
@@ -51,15 +48,12 @@ class PartnerJoinRequestController extends Controller
 
         return response()->json(['message' => 'Request approved']);
     }
-
-    // ADMIN rejects
     public function reject(PartnerJoinRequest $request)
     {
         $request->update(['status' => 'rejected']);
 
         return response()->json(['message' => 'Request rejected']);
     }
-
     public function remove(Request $request, $id)
     {
         $product = Product::findOrFail($id);
@@ -68,8 +62,6 @@ class PartnerJoinRequestController extends Controller
 
         return response()->json(['message' => 'Removed']);
     }
-
-    // ADMIN list all
     public function index()
     {
         return PartnerJoinRequest::with(['partner', 'product'])

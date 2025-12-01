@@ -14,6 +14,7 @@ class PartnerProduct extends Model
     protected $fillable = [
         'product_id',
         'partner_id',
-        'price'
+        'price',
+        'quantity'
     ];
 }

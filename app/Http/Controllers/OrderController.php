@@ -7,6 +7,8 @@ use App\Models\PartnerProduct;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Http\Requests\CreateOrderRequest;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -16,13 +18,6 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'items' => 'required|array',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.partner_id' => 'required|exists:partners,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
-
         $user = Auth::user();
 
         DB::beginTransaction();
@@ -91,21 +86,6 @@ class OrderController extends Controller
 
     public function index()
     {
-        //        $user = Auth::user();
-
-        //        $orders = Order::where('user_id', $user->id)->get();
-
-        //        foreach ($orders as $order) {
-        //            $orderItems = OrderItem::where('order_id', $order->id)->get();
-        //
-        //            foreach ($orderItems as $orderItem) {
-        //                $product = Product::find($orderItem['product_id']);
-        //                $orderItem->product = $product;
-        //            }
-        //
-        //            $order->items = $orderItems;
-        //        }
-
        $orders = Order::with(['items.product'])
            ->where('user_id', Auth::id())
            ->get();

@@ -4,115 +4,95 @@ namespace App\Http\Controllers;
 
 use App\Models\Cart;
 use App\Models\Product;
-use Illuminate\Http\Request;
+use App\Models\PartnerProduct;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Http\Requests\AddCartItemRequest;
+use App\Http\Requests\DecreaseCartItemRequest;
 use App\Http\Requests\MergeGuestCartRequest;
 
 class CartController extends Controller
 {
     public function index()
     {
-        $userId = Auth::id();
-
-        $cart = Cart::where('user_id', $userId)->get();
-
-        foreach ($cart as $item) {
-            $item->product = Product::find($item->product_id);
-        }
+        $cart = Cart::where('user_id', Auth::id())
+            ->get()
+            ->map(function($item) {
+                $item->product = Product::where('id', $item->product_id)->first();
+                return $item;
+            });
 
         return response()->json($cart);
     }
 
-    public function add(Request $request)
+    public function add(AddCartItemRequest $request)
     {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'partner_id' => 'required|exists:partners,id',
-            'quantity' => 'required|integer',
-            'price' => 'nullable|integer',
-        ]);
-
-        $product = Product::find($request->product_id);
-
-        if (!$product) {
-            return response()->json(['message' => 'Product not found'], 404);
-        }
-
+        $product = Product::findOrFail($request->product_id);
         $qty = $request->quantity ?? 1;
 
         if ($qty > $product->quantity) {
-            return response()->json(['message' => 'Қоймада тек ' . $product->quantity . ' дана бар'], 400);
+            return response()->json([
+                'message' => "Қоймада тек {$product->quantity} дана бар"
+            ], 400);
         }
+
+        $price = PartnerProduct::where('product_id', $product->id)
+            ->where('partner_id', $request->partner_id)
+            ->value('price') ?? $product->price;
 
         $cart = Cart::firstOrNew([
             'user_id' => Auth::id(),
-            'product_id' => $request->product_id,
+            'product_id' => $product->id,
             'partner_id' => $request->partner_id,
-            'price' => $request->price,
         ]);
 
-        $newQty = ($cart->exists ? $cart->quantity : 0) + $qty;
+        $cart->quantity = ($cart->quantity ?? 0) + $qty;
+        if ($cart->quantity > $product->quantity) {
+            return response()->json([
+                'message' => 'Қоймада бар саннан артық қоса алмайсыз'
+            ], 400);
+        }
 
-        if ($newQty > $product->quantity)
-            return response()->json(['message' => 'Қоймада бар саннан артық қоса алмайсыз'], 400);
-
-        $cart->quantity = $newQty;
+        $cart->price = $price;
         $cart->save();
 
-        return response()->json($cart, 201);
+        return response()->json($cart->load('product'), 201);
     }
 
-    public function decrease(Request $request)
+    public function decrease(DecreaseCartItemRequest $request)
     {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'partner_id' => 'required|exists:partners,id',
-            'quantity' => 'integer|min:1'
-        ]);
-
-        $cartItem = Cart::where('user_id', Auth::id())
-            ->where('product_id', $request->product_id)
-            ->where('partner_id', $request->partner_id)
-            ->first();
-
-        if (!$cartItem) {
-            return response()->json(['message' => 'Cart item not found'], 404);
-        }
+        $cartItem = Cart::where([
+            'user_id' => $request->user()->id,
+            'product_id' => $request->product_id,
+            'partner_id' => $request->partner_id
+        ])->firstOrFail();
 
         $cartItem->quantity -= $request->quantity ?? 1;
 
         if ($cartItem->quantity <= 0) {
             $cartItem->delete();
             return response()->json(['message' => 'Cart item removed']);
-        } else {
-            $cartItem->save();
-            return response()->json($cartItem);
         }
+
+        $cartItem->save();
+        return response()->json($cartItem);
     }
 
     public function mergeGuestCart(MergeGuestCartRequest $request)
     {
-        $user = $request->user();
-        foreach ($request->guest_cart as $item) {
-            $existing = Cart::where('user_id', $user->id)
-                ->where('product_id', $item['product_id'])
-                ->where('partner_id', $item['partner_id'])
-                ->first();
+        $userId = $request->user()->id;
 
-            if ($existing) {
-                $existing->quantity += $item['quantity'];
-                $existing->save();
-            } else {
-                Cart::create([
-                    'user_id' => $user->id,
+        foreach ($request->guest_cart as $item) {
+            Cart::updateOrCreate(
+                [
+                    'user_id' => $userId,
                     'product_id' => $item['product_id'],
                     'partner_id' => $item['partner_id'],
-                    'quantity' => $item['quantity']
-                ]);
-            }
+                ],
+                ['quantity' => DB::raw("quantity + {$item['quantity']}")]
+            );
         }
 
         return response()->json(['message' => 'Guest cart merged successfully']);
     }
-
 }

@@ -6,35 +6,29 @@ use App\Models\Partner;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PartnerReview;
+use App\Http\Requests\PartnerRegisterRequest;
+use App\Http\Requests\PartnerLoginRequest;
+use App\Http\Requests\EditPartnerRequest;
+use App\Http\Requests\CreatePartnerRequest;
+use App\Http\Requests\UpdatePartnerRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class PartnerController extends Controller
 {
-    public function register(Request $request)
+    public function register(PartnerRegisterRequest $request)
     {
-        $data = $request->validate([
-            'company_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:partners',
-            'password' => 'required|min:6|confirmed',
-        ]);
-
         $partner = Partner::create([
-            'company_name' => $data['company_name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
+            'company_name' => $request->company_name,
+            'email'        => $request->email,
+            'password'     => Hash::make($request->password),
         ]);
 
         return response()->json(['partner' => $partner], 201);
     }
-
-    public function login(Request $request)
+    public function login(PartnerLoginRequest $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
-
         $partner = Partner::where('email', $request->email)->first();
 
         if (!$partner || !\Hash::check($request->password, $partner->password)) {
@@ -53,25 +47,15 @@ class PartnerController extends Controller
         $request->user()->tokens()->delete();
         return response()->json(['message' => 'Logged out']);
     }
-
     public function me()
     {
-        return response()->json(auth('sanctum')->user());
+        $partner = auth()->user();
+        return response()->json($partner);
     }
-
-    public function edit(Request $request)
+    public function edit(EditPartnerRequest $request)
     {
-        $partner = auth('sanctum')->user();
-
-        if (!$partner) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        $validated = $request->validate([
-            'company_name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:partners,email,' . $partner->id,
-            'password' => 'sometimes|string|min:6|confirmed',
-        ]);
+        $partner = $request->user();
+        $validated = $request->validated();
 
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
@@ -84,35 +68,29 @@ class PartnerController extends Controller
             'partner' => $partner,
         ]);
     }
-
     public function index()
     {
-        $partners = Partner::all();
+        $partners = Partner::query()
+            ->leftJoin('order_items', 'partners.id', '=', 'order_items.partner_id')
+            ->leftJoin('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('partner_reviews', 'partners.id', '=', 'partner_reviews.partner_id')
+            ->select(
+                'partners.*',
 
-        foreach ($partners as $partner) {
-            $items = OrderItem::where('partner_id', $partner->id)->get();
+                // Барлық сатылым сомасы
+                DB::raw('COALESCE(SUM(order_items.price * order_items.quantity), 0) AS total_sales'),
 
-            $orderIds = $items->pluck('order_id')->unique();
+                // Орташа рейтинг
+                DB::raw('COALESCE(ROUND(AVG(partner_reviews.rating), 1), 0) AS rating'),
 
-            $orders = Order::whereIn('id', $orderIds)->get();
-
-            $partner->orders = $orders;
-
-            $total = $items->sum(function ($item) {
-                return $item->price * $item->quantity;
-            });
-
-            $partner->total_sales = $total;
-
-            $avgRating = PartnerReview::where('partner_id', $partner->id)->avg('rating');
-            $partner->rating = $avgRating ? round($avgRating, 1) : 0;
-
-            $partner->reviews_count = PartnerReview::where('partner_id', $partner->id)->count();
-        }
+                // Ревью саны
+                DB::raw('COUNT(partner_reviews.id) AS reviews_count')
+            )
+            ->groupBy('partners.id')
+            ->get();
 
         return response()->json($partners);
     }
-
     public function show($id)
     {
         $partner = Partner::with([
@@ -125,28 +103,19 @@ class PartnerController extends Controller
         }
         return response()->json($partner);
     }
-
-    public function store(Request $request)
+    public function store(CreatePartnerRequest $request)
     {
-        $validated = $request->validate([
-            'company_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:partners',
-            'phone' => 'nullable|string|max:50',
-            'address' => 'nullable|string|max:255',
-            'password' => 'required|string|min:6',
-        ]);
+        $data = $request->validated();
+        $data['password'] = bcrypt($data['password']);
 
-        $validated['password'] = bcrypt($validated['password']);
-
-        $partner = Partner::create($validated);
+        $partner = Partner::create($data);
 
         return response()->json([
             'message' => 'Partner created successfully',
             'partner' => $partner
         ], 201);
     }
-
-    public function update(Request $request, $id)
+    public function update(UpdatePartnerRequest $request, $id)
     {
         $partner = Partner::find($id);
 
@@ -154,29 +123,21 @@ class PartnerController extends Controller
             return response()->json(['message' => 'Partner not found'], 404);
         }
 
-        $validated = $request->validate([
-            'company_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:partners,email,' . $id,
-            'phone' => 'nullable|string|max:50',
-            'address' => 'nullable|string|max:255',
-            'password' => 'nullable|string|min:6',
-            'role' => 'nullable|string',
-        ]);
+        $data = $request->validated();
 
         if ($request->filled('password')) {
-            $validated['password'] = bcrypt($validated['password']);
+            $data['password'] = bcrypt($data['password']);
         } else {
-            unset($validated['password']);
+            unset($data['password']);
         }
 
-        $partner->update($validated);
+        $partner->update($data);
 
         return response()->json([
             'message' => 'Partner updated successfully',
-            'partner' => $partner
+            'partner' => $partner,
         ]);
     }
-
     public function destroy($id)
     {
         $partner = Partner::find($id);

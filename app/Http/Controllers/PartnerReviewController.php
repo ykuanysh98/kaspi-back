@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PartnerReview;
+use App\Http\Requests\CreatePartnerReviewRequest;
 use Illuminate\Database\Eloquent\Model;
 
 use App\Models\Product;
@@ -24,17 +25,11 @@ class PartnerReviewController extends Controller
 
         return response()->json($reviews);
     }
-
-    public function store(Request $request, $id)
+    public function store(CreatePartnerReviewRequest $request, $id)
     {
-        $request->validate([
-            'rating' => 'required|integer|min:1|max:5',
-            'comment' => 'nullable|string|min:3',
-        ]);
-
         // Бір user → бір партнерге 1 отзыв
         $existing = PartnerReview::where('partner_id', $id)
-            ->where('user_id', auth()->id())
+            ->where('user_id', $request->user()->id)
             ->first();
 
         if ($existing) {
@@ -43,7 +38,7 @@ class PartnerReviewController extends Controller
 
         PartnerReview::create([
             'partner_id' => $id,
-            'user_id' => auth()->id(),
+            'user_id' => $request->user()->id,
             'rating' => $request->rating,
             'comment' => $request->comment,
         ]);

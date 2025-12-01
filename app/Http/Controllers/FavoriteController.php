@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductImage;
+use App\Http\Requests\ToggleFavoriteRequest;
+
 use Illuminate\Http\Request;
 use App\Models\Favorites;
 use App\Models\Product;
@@ -28,22 +30,20 @@ class FavoriteController extends Controller
         return response()->json($products);
     }
 
-    public function toggle(Request $request)
+    public function toggle(ToggleFavoriteRequest $request)
     {
-        $user = Auth::user();
-
-        $request->validate([
-            'product_id' => 'required|exists:products,id'
-        ]);
+        $user = $request->user();
 
         $favorites = Favorites::where('product_id', $request->product_id)
             ->where('user_id', $user->id)
             ->first();
 
         if ($favorites) {
-
             $favorites->delete();
-            return response()->json(['message' => 'Removed from favorites', 'is_favorite' => false], 200);
+            return response()->json([
+                'message' => 'Removed from favorites',
+                'is_favorite' => false
+            ], 200);
 
         } else {
 
@@ -51,8 +51,11 @@ class FavoriteController extends Controller
                 'user_id' => $user->id,
                 'product_id' => $request->product_id
             ]);
-            return response()->json(['message' => 'Added to favorites', 'is_favorite' => true], 200);
 
+            return response()->json([
+                'message' => 'Added to favorites',
+                'is_favorite' => true
+            ], 200);
         }
     }
 }

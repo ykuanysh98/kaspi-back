@@ -3,51 +3,37 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use App\Models\Product;
 use App\Models\Order;
-use App\Models\PartnerProduct;
+use App\Http\Requests\UserUpdateRequest;
+use App\Http\Requests\CreateUserRequest;
+use App\Http\Requests\UpdateUserRequest;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
-    public function me(Request $request)
+    public function me()
     {
-        return response()->json(Auth::user());
+        return response()->json(auth()->user());
     }
-
-    public function user(Request $request)
+    public function user(UserUpdateRequest $request)
     {
-        $user = Auth::user();
+        $user = auth()->user();
 
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'password' => 'nullable|min:6',
-        ]);
+        $data = $request->validated();
 
-        if (isset($validated['name'])) {
-            $user->name = $validated['name'];
+        if (isset($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
         }
 
-        if (isset($validated['email'])) {
-            $user->email = $validated['email'];
-        }
-
-        if (isset($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
-        }
-
-        $user->save();
+        $user->update($data);
 
         return response()->json([
             'message' => 'Профиль сәтті жаңартылды ✅',
             'user' => $user
         ]);
     }
-
     public function index(Request $request)
     {
         $sort = $request->get('sort', 'id');
@@ -76,7 +62,6 @@ class UserController extends Controller
 
         return response()->json($users);
     }
-
     public function show(User $user)
     {
         $orders = Order::where('user_id', $user->id)->get();
@@ -87,21 +72,13 @@ class UserController extends Controller
             'data' => $user
         ]);
     }
-
-    public function store(Request $request)
+    public function store(CreateUserRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6',
-            'role' => 'nullable|string',
-        ]);
-
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'role' => $validated['role'] ?? 'user',
+            'name' => $request['name'],
+            'email' => $request['email'],
+            'password' => Hash::make($request['password']),
+            'role' => $request['role'] ?? 'user',
         ]);
 
         return response()->json([
@@ -109,40 +86,22 @@ class UserController extends Controller
             'user' => $user
         ], 201);
     }
-
-    public function update(Request $request, User $user)
+    public function update(UpdateUserRequest $request, User $user)
     {
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'password' => 'nullable|string|min:6',
-            'role' => 'nullable|string',
-        ]);
+        $data = $request->only(['name', 'email', 'role']);
 
-        if (isset($validated['name'])) {
-            $user->name = $validated['name'];
+        // Егер пароль берілсе, хэштеу
+        if ($request->filled('password')) {
+            $data['password'] = Hash::make($request->password);
         }
 
-        if (isset($validated['email'])) {
-            $user->email = $validated['email'];
-        }
-
-        if (isset($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
-        }
-
-        if (isset($validated['role'])) {
-            $user->role = $validated['role'];
-        }
-
-        $user->save();
+        $user->update($data);
 
         return response()->json([
             'message' => 'Қолданушы сәтті жаңартылды ✅',
             'user' => $user
         ]);
     }
-
     public function destroy(User $user)
     {
         $user->delete();

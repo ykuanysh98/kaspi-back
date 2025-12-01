@@ -16,4 +16,22 @@ class Cart extends Model
         'quantity',
         'price',
     ];
+
+    // 🟢 Карточка — бір өнімге тиесілі
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    // 🟢 Карточка — бір партнерге тиесілі
+    public function partner()
+    {
+        return $this->belongsTo(Partner::class);
+    }
+
+    // 🟢 Карточка — бір қолданушыға тиесілі
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

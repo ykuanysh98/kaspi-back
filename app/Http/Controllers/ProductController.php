@@ -8,6 +8,11 @@ use App\Models\Category;
 use App\Models\Favorites;
 use App\Models\PartnerProduct;
 use App\Models\ProductImage;
+use App\Http\Requests\CreateProductRequest;
+use App\Http\Requests\UpdateProductRequest;
+use App\Http\Requests\UploadProductImageRequest;
+use App\Http\Requests\AttachPartnerRequest;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -77,13 +82,9 @@ class ProductController extends Controller
             $product->partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
                 ->where('partner_product.product_id', $product->id)
                 ->select(
-                    'partners.id',
-                    'partners.company_name',
-                    'partners.email',
-                    'partners.phone',
-
-                    // нақты partner_product бағасын аламыз
-                    // егер null болса → product.price қайтарылады
+                    'partners.*',
+                    'partner_product.price',
+                    'partner_product.quantity',
                     DB::raw("COALESCE(partner_product.price, {$product->price}) AS price")
                 )
                 ->get();
@@ -103,8 +104,6 @@ class ProductController extends Controller
 
         return response()->json($products);
     }
-
-    // Recursive function to get all child category IDs
     private function getAllCategoryIds(Category $category)
     {
         $ids = [$category->id];
@@ -115,12 +114,15 @@ class ProductController extends Controller
 
         return $ids;
     }
-
     public function show(Product $product)
     {
         $partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
             ->where('partner_product.product_id', $product->id)
-            ->select('partners.*', 'partner_product.price') // price қосылды
+            ->select(
+                'partners.*',
+                'partner_product.price',
+                'partner_product.quantity'
+            )
             ->get();
 
         $images = ProductImage::where('product_id', $product->id)
@@ -132,23 +134,16 @@ class ProductController extends Controller
 
         return response()->json(['data' => $product]);
     }
-
-    public function store(Request $request)
+    public function store(CreateProductRequest $request)
     {
-        $validated = $request->validate([
-            'name'        => 'required|string|max:255|unique:products,name',
-            'price'       => 'required|numeric',
-            'quantity'    => 'required|integer|min:0',
-            'description' => 'nullable|string',
-            'images.*' => 'image|mimes:jpeg,png,jpg,gif|max:5120',
-            'status' => 'string',
-        ]);
+        $validated = $request->validated();
 
         $product = Product::create([
             'name'        => $validated['name'],
             'price'       => $validated['price'],
             'quantity'    => $validated['quantity'],
             'description' => $validated['description'],
+            'status'      => $validated['status'] ?? 'active',
         ]);
 
         if ($request->hasFile('images')) {
@@ -170,45 +165,64 @@ class ProductController extends Controller
 
         return response()->json($product->load('images'), 201);
     }
-
-    public function update(Request $request, Product $product)
+    public function update(UpdateProductRequest $request, Product $product)
     {
-        $validated = $request->validate([
-            'name'        => 'sometimes|string|max:255',
-            'price'       => 'sometimes|numeric',
-            'quantity'    => 'sometimes|integer|min:0',
-            'description' => 'nullable|string',
-            'status'      => 'in:active,inactive,out_of_stock',
-            'partner_id'  => 'sometimes|exists:partners,id', // партнерді беру керек
-        ]);
+        $validated = $request->validated();
 
-        $productFields = collect($validated)->only(['name', 'quantity', 'description', 'status'])->toArray();
+        // 🔹 1) Product-тың өз өрістерін бөлек жаңарту
+        $productFields = collect($validated)->only([
+            'name', 'description', 'status'
+        ])->toArray();
+
         if (!empty($productFields)) {
             $product->update($productFields);
         }
 
-        if (isset($validated['price']) && isset($validated['partner_id'])) {
+        // 🔹 2) Авторизация арқылы партнерді алу
+        $partner = Auth::user();     // partners таблицасындағы user
+
+        if (!$partner) {
+            return response()->json([
+                'message' => 'Unauthorized partner'
+            ], 403);
+        }
+
+        // 🔹 3) partner_product бағасын/quantity жаңарту
+        if (isset($validated['price']) || isset($validated['quantity'])) {
+
             $partnerProduct = PartnerProduct::where('product_id', $product->id)
-                ->where('partner_id', $validated['partner_id'])
+                ->where('partner_id', $partner->id)
                 ->first();
 
+            $updateFields = [];
+
+            // баға келсе — жаңарту
+            if (isset($validated['price'])) {
+                $updateFields['price'] = $validated['price'];
+            }
+
+            // quantity келсе — жаңарту
+            if (isset($validated['quantity'])) {
+                $updateFields['quantity'] = $validated['quantity'];
+            }
+
             if ($partnerProduct) {
-                $partnerProduct->update(['price' => $validated['price']]);
+                $partnerProduct->update($updateFields);
             } else {
                 PartnerProduct::create([
                     'product_id' => $product->id,
-                    'partner_id' => $validated['partner_id'],
-                    'price'      => $validated['price'],
+                    'partner_id' => $partner->id,
+                    'price'      => $validated['price'] ?? $product->price,
+                    'quantity'   => $validated['quantity'] ?? 0,
                 ]);
             }
         }
 
         return response()->json([
             'message' => 'Product updated successfully ✅',
-            'product' => $product->fresh('images', 'partners'),
+            'product' => $product->fresh('images'),
         ]);
     }
-
     public function destroy(Product $product)
     {
         $product->delete();
@@ -227,13 +241,8 @@ class ProductController extends Controller
 
         return response()->json(['message' => 'Product deleted']);
     }
-
-    public function uploadImage(Request $request, Product $product)
+    public function uploadImage(UploadProductImageRequest $request, Product $product)
     {
-        $request->validate([
-            'image' => 'required|image|max:2048',
-        ]);
-
         $path = $request->file('image')->store('products', 'public');
 
         $image = ProductImage::create([
@@ -246,7 +255,6 @@ class ProductController extends Controller
             'image'   => $image,
         ]);
     }
-
     public function deleteImage(ProductImage $image)
     {
         if (
@@ -264,29 +272,26 @@ class ProductController extends Controller
             'images' => $image,
         ]);
     }
-
-
-    public function attachPartner(Request $request, $productId)
+    public function attachPartner(AttachPartnerRequest $request, $productId)
     {
-        $request->validate([
-            'partner_id' => 'required|array',
-            'partner_id.*' => 'exists:partners,id',
-        ]);
-
         $product = Product::find($productId);
 
         PartnerProduct::where('product_id', $product->id)->delete();
 
         foreach ($request->partner_id as $partnerId) {
+            $price = $request->price ?? $product->price;
+            $quantity = $request->quantity ?? 0;
+
             PartnerProduct::firstOrCreate([
                 'product_id' => $product->id,
                 'partner_id' => $partnerId,
+                'price' => $price,
+                'quantity' => $quantity,
             ]);
         }
 
         return response()->json(['message' => 'Partner attached to product successfully']);
     }
-
     public function requestActivation(Product $product)
     {
         // Егер продукт қазір active болса — запрос керегі жоқ
@@ -318,7 +323,6 @@ class ProductController extends Controller
             'message' => 'Активацияға запрос жіберілді'
         ]);
     }
-
     public function activationRequests()
     {
         $requests = ProductActivationRequest::with(['product', 'partner'])
@@ -327,7 +331,6 @@ class ProductController extends Controller
 
         return response()->json($requests);
     }
-
     public function approve(Product $product)
     {
         $product->status = 'active';
@@ -341,7 +344,6 @@ class ProductController extends Controller
             'message' => 'Өнім сәтті активке өткізілді'
         ]);
     }
-
     public function reject(Product $product)
     {
         ProductActivationRequest::where('product_id', $product->id)
@@ -351,5 +353,4 @@ class ProductController extends Controller
             'message' => 'Запрос қабылданбады'
         ]);
     }
-
 }

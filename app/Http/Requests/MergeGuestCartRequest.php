@@ -16,6 +16,7 @@ class MergeGuestCartRequest extends FormRequest
         return [
             'guest_cart' => 'required|array',
             'guest_cart.*.product_id' => 'required|exists:products,id',
+            'guest_cart.*.partner_id' => 'required|exists:partners,id',
             'guest_cart.*.quantity' => 'required|integer|min:1'
         ];
     }
