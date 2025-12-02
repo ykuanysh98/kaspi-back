@@ -42,25 +42,20 @@ class ProductController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
-
         if ($request->filled('min_price')) {
             $query->where('price', '>=', $request->min_price);
         }
-
         if ($request->filled('max_price')) {
             $query->where('price', '<=', $request->max_price);
         }
-
         if ($request->filled('partner_id')) {
             $partnerId = $request->partner_id;
-
             $query->whereHas('partners', function ($q) use ($partnerId) {
                 $q->where('partners.id', $partnerId);
             });
         }
 
         $sort = $request->get('sort', 'id');
-
         switch ($sort) {
             case 'sum_max':
                 $query->orderByDesc('price');
@@ -76,23 +71,7 @@ class ProductController extends Controller
         $products = $query->paginate($request->get('per_page', 12));
 
         foreach ($products as $product) {
-
-            $partnersIds = PartnerProduct::where('product_id', $product->id)->pluck('partner_id')->toArray();
-
-            $product->partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
-                ->where('partner_product.product_id', $product->id)
-                ->select(
-                    'partners.*',
-                    'partner_product.price',
-                    'partner_product.quantity',
-                    DB::raw("COALESCE(partner_product.price, {$product->price}) AS price")
-                )
-                ->get();
-
-            // Images
-            $product->images = ProductImage::where('product_id', $product->id)
-                ->select('id', 'path')
-                ->get();
+            $product->load(['partners', 'images']);
 
             // Favorite
             $product->is_favorite = $user
@@ -116,22 +95,7 @@ class ProductController extends Controller
     }
     public function show(Product $product)
     {
-        $partners = PartnerProduct::join('partners', 'partners.id', '=', 'partner_product.partner_id')
-            ->where('partner_product.product_id', $product->id)
-            ->select(
-                'partners.*',
-                'partner_product.price',
-                'partner_product.quantity'
-            )
-            ->get();
-
-        $images = ProductImage::where('product_id', $product->id)
-            ->select('id', 'path')
-            ->get();
-
-        $product->partners = $partners;
-        $product->images = $images; // imeges → images деп түзеттім
-
+        $product->load(['partners', 'images']);
         return response()->json(['data' => $product]);
     }
     public function store(CreateProductRequest $request)

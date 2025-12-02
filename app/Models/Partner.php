@@ -44,5 +44,15 @@ class Partner extends Authenticatable
         return $this->belongsToMany(Product::class, 'partner_product');
     }
 
+    public function partners()
+    {
+        return $this->belongsToMany(Partner::class, 'partner_product')
+            ->withPivot('price', 'quantity');
+    }
+
+    public function images()
+    {
+        return $this->hasMany(ProductImage::class);
+    }
 
 }

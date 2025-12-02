@@ -18,14 +18,8 @@ class FavoriteController extends Controller
         $products = Product::leftjoin('favorites', 'favorites.product_id', '=', 'products.id')
             ->where('favorites.user_id', Auth::id())
             ->select('products.*', DB::raw('true as is_favorite'))
+            ->with('images')
             ->get();
-
-        foreach ($products as $product) {
-            // Images
-            $product->images = ProductImage::where('product_id', $product->id)
-                ->select('id', 'path')
-                ->get();
-        }
 
         return response()->json($products);
     }

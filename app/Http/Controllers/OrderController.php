@@ -7,18 +7,15 @@ use App\Models\PartnerProduct;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Http\Requests\CreateOrderRequest;
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
 
     public function store(Request $request)
     {
-        $user = Auth::user();
+        $user = auth()->user();
 
         DB::beginTransaction();
 
@@ -87,7 +84,7 @@ class OrderController extends Controller
     public function index()
     {
        $orders = Order::with(['items.product'])
-           ->where('user_id', Auth::id())
+           ->where('user_id', auth()->id())
            ->get();
 
         return response()->json($orders, 201);
@@ -95,10 +92,9 @@ class OrderController extends Controller
 
     public function list()
     {
-        $partner = Auth::user();
+        $partner = auth()->user();
 
-        $orders = \DB::table('orders')
-            ->join('order_items', 'orders.id', '=', 'order_items.order_id')
+        $orders = Order::join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->where('order_items.partner_id', $partner->id)
             ->select('orders.*')
             ->get();

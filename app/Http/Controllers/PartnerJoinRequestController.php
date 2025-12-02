@@ -44,6 +44,7 @@ class PartnerJoinRequestController extends Controller
         $request->update(['status' => 'approved']);
 
         // партнерды осы продуктке қосу
+        // partner_product кестесіне жаңа жазба қосады
         $request->product->partners()->attach($request->partner_id);
 
         return response()->json(['message' => 'Request approved']);
