@@ -15,7 +15,7 @@ class CartController extends Controller
 {
     public function index()
     {
-        $cart = Cart::where('user_id', Auth::id())->with('product')->get();
+        $cart = Cart::where('user_id', Auth::id())->with('product.partners')->get();
         return response()->json($cart);
     }
 
@@ -23,10 +23,13 @@ class CartController extends Controller
     {
         $product = Product::findOrFail($request->product_id);
         $qty = $request->quantity ?? 1;
+        $qtyPartner = PartnerProduct::where('product_id', $product->id)
+            ->where('partner_id', $request->partner_id)
+            ->value('quantity');
 
-        if ($qty > $product->quantity) {
+        if ($qty > $qtyPartner) {
             return response()->json([
-                'message' => "Қоймада тек {$product->quantity} дана бар"
+                'message' => "Қоймада тек {$qtyPartner} дана бар"
             ], 400);
         }
 
@@ -41,7 +44,7 @@ class CartController extends Controller
         ]);
 
         $cart->quantity = ($cart->quantity ?? 0) + $qty;
-        if ($cart->quantity > $product->quantity) {
+        if ($cart->quantity > $qtyPartner) {
             return response()->json([
                 'message' => 'Қоймада бар саннан артық қоса алмайсыз'
             ], 400);

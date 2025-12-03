@@ -42,7 +42,8 @@ class Product extends Model
     }
     public function partners()
     {
-        return $this->belongsToMany(Partner::class, 'partner_product');
+        return $this->belongsToMany(Partner::class, 'partner_product')
+            ->withPivot('price', 'quantity');
     }
     public function images()
     {
