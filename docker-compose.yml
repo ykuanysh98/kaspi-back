@@ -1,0 +1,71 @@
+Үservices:
+    # 1. PHP-FPM (Laravel Application)
+    app:
+        build:
+            context: .
+            dockerfile: .docker/php/Dockerfile
+        container_name: kaspi-back-app
+        restart: unless-stopped
+        working_dir: /var/www
+        volumes:
+            - .:/var/www
+        environment:
+            # .env-тегі DB_HOST пен REDIS_HOST мәндерін контейнер ішінде өшіреміз (override)
+            - DB_HOST=db
+            - REDIS_HOST=redis
+        depends_on:
+            - db
+            - redis
+        networks:
+            - kaspi-network
+
+    # 2. Nginx Веб-сервер
+    webserver:
+        image: nginx:alpine
+        container_name: kaspi-back-webserver
+        restart: unless-stopped
+        ports:
+            # Сыртқы порт 8000 арқылы Laravel API қолжетімді болады
+            - "8000:80"
+        volumes:
+            - .:/var/www
+            - .docker/nginx/conf.d/:/etc/nginx/conf.d/
+        depends_on:
+            - app
+        networks:
+            - kaspi-network
+
+    # 3. MySQL Деректер қоры
+    db:
+        image: mysql:8.0
+        container_name: kaspi-back-db
+        restart: unless-stopped
+        environment:
+            - MYSQL_DATABASE=mybackend
+            - MYSQL_ROOT_PASSWORD=123456
+        ports:
+            - "3307:3306"
+        volumes:
+            - kaspi-db-data:/var/lib/mysql
+        networks:
+            - kaspi-network
+
+    # 4. Redis кэш
+    redis:
+        image: redis:alpine
+        container_name: kaspi-back-redis
+        restart: unless-stopped
+        ports:
+            - "6379:6379"
+        networks:
+            - kaspi-network
+
+# Деректер жоғалып кетпеуі үшін жеке диск (Volume) жасаймыз
+volumes:
+    kaspi-db-data:
+        driver: local
+
+# Қауіпсіз және жеке желі құрамыз
+networks:
+    kaspi-network:
+        driver: bridge
