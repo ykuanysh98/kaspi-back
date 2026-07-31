@@ -10,6 +10,8 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\PartnerReviewController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\SpeechController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +33,9 @@ Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/users/{user}', [UserController::class, 'show']); // Белгілі қолданушы
+
+Route::post('/chat', [ChatController::class, 'handle']);
+Route::post('/transcribe', [SpeechController::class, 'transcribe']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
