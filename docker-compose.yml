@@ -1,4 +1,4 @@
-Үservices:
+services:
     # 1. PHP-FPM (Laravel Application)
     app:
         build:
